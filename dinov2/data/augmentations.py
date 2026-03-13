@@ -194,18 +194,21 @@ class RandStainNA(torch.nn.Module):
         return self.augment(img)
 
 class ElasticDeformation(torch.nn.Module):
-    """
-    Elastic deformation to simulate slide pulling on tissue. Used from kaggle challenge.
-    """
-    def __init__(self, alpha=50.0, sigma=5.0, probability=0.5):
+    def __init__(self, low_alpha=40.0, high_alpha=200.0, low_sigma=5.0, high_sigma=10.0, probability=0.5):
         super().__init__()
-        self.alpha = alpha
-        self.sigma = sigma
+        self.low_alpha = low_alpha
+        self.high_alpha = high_alpha
+        self.low_sigma = low_sigma
+        self.high_sigma = high_sigma
         self.probability = probability
 
     def forward(self, img):
         if random.random() > self.probability:
             return img
+
+
+        alpha = random.uniform(self.low_alpha, self.high_alpha)
+        sigma = random.uniform(self.low_sigma, self.high_sigma)
 
         was_pil = False
         was_tensor = False
@@ -214,25 +217,29 @@ class ElasticDeformation(torch.nn.Module):
             img_np = np.array(img)
             was_pil = True
         elif isinstance(img, torch.Tensor):
-            img_np = img.permute(1, 2, 0).numpy() * 255.0
-            img_np = img_np.astype(np.uint8)
+            # Assumes float tensor in [0, 1] with shape (C, H, W)
+            img_np = (img.permute(1, 2, 0).numpy() * 255.0).astype(np.uint8)
             was_tensor = True
         else:
             img_np = img
 
         shape = img_np.shape
+        h, w = shape[:2]
 
-        dx = cv2.GaussianBlur((np.random.rand(*shape[:2]) * 2 - 1).astype(np.float32), 
-                              (0, 0), self.sigma) * self.alpha
-        dy = cv2.GaussianBlur((np.random.rand(*shape[:2]) * 2 - 1).astype(np.float32), 
-                              (0, 0), self.sigma) * self.alpha
+        # Apply sampled alpha and sigma
+        dx = cv2.GaussianBlur((np.random.rand(h, w) * 2 - 1).astype(np.float32), 
+                              (0, 0), sigma) * alpha
+        dy = cv2.GaussianBlur((np.random.rand(h, w) * 2 - 1).astype(np.float32), 
+                              (0, 0), sigma) * alpha
 
-        x, y = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
+        x, y = np.meshgrid(np.arange(w), np.arange(h))
 
-        map_x = np.float32(x + dx)
-        map_y = np.float32(y + dy)
+        map_x = (x + dx).astype(np.float32)
+        map_y = (y + dy).astype(np.float32)
 
-        distorted_img = cv2.remap(img_np, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+        distorted_img = cv2.remap(img_np, map_x, map_y, 
+                                  interpolation=cv2.INTER_LINEAR, 
+                                  borderMode=cv2.BORDER_REFLECT_101)
 
         if was_pil:
             return Image.fromarray(distorted_img)
@@ -243,7 +250,7 @@ class ElasticDeformation(torch.nn.Module):
 
 class JpegCompression(torch.nn.Module):
 
-    def __init__(self, quality_lower=50, quality_upper=100, probability=0.5):
+    def __init__(self, quality_lower=20, quality_upper=100, probability=0.5):
         super().__init__()
         self.quality_lower = quality_lower
         self.quality_upper = quality_upper
