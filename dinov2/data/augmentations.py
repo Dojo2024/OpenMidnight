@@ -217,7 +217,6 @@ class ElasticDeformation(torch.nn.Module):
             img_np = np.array(img)
             was_pil = True
         elif isinstance(img, torch.Tensor):
-            # Assumes float tensor in [0, 1] with shape (C, H, W)
             img_np = (img.permute(1, 2, 0).numpy() * 255.0).astype(np.uint8)
             was_tensor = True
         else:
@@ -226,7 +225,6 @@ class ElasticDeformation(torch.nn.Module):
         shape = img_np.shape
         h, w = shape[:2]
 
-        # Apply sampled alpha and sigma
         dx = cv2.GaussianBlur((np.random.rand(h, w) * 2 - 1).astype(np.float32), 
                               (0, 0), sigma) * alpha
         dy = cv2.GaussianBlur((np.random.rand(h, w) * 2 - 1).astype(np.float32), 
